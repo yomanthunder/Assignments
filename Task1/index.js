@@ -17,7 +17,11 @@ async function fetchData(entityName) {
       }
     );
 
-    return response.data.data[entityName];
+    const typeInfo = response.data.data.__schema.types.find(
+      (type) => type.name === entityName
+    );
+
+    return typeInfo && typeInfo.fields ? typeInfo.fields : [];
   } catch (error) {
     console.error(error);
     return []; // Return an empty array if there's an error
@@ -31,14 +35,15 @@ async function insertData(db, tableName, data) {
   }
 
   // Check if the first item has a 'name' property
-  if (!data[0].hasOwnProperty("subscriptionType")) {
+  if (!data[0].hasOwnProperty("name")) {
     console.error("Data items do not have a 'name' property");
     return;
   }
 
   let placeholders = data.map((_, index) => `$${index + 1}`).join(",");
   let sql = `INSERT INTO ${tableName} VALUES (${placeholders})`;
-  db.run(sql, ...data.flat(), (err) => {
+
+  db.run(sql, ...data.map((field) => field.name), function (err) {
     if (err) {
       return console.error(err.message);
     }
@@ -60,7 +65,7 @@ async function main() {
       !entity.name.startsWith("_")
   );
 
-  entities.forEach((entity) => {
+  for (const entity of entities) {
     const fields = entity.fields
       .map((field) => `${field.name} text`)
       .join(", ");
@@ -72,27 +77,32 @@ async function main() {
       }
       console.log(`Created table ${entity.name}`);
     });
-  });
+  }
 
   // Select the first three entities
   const selectedEntities = entities.slice(0, 3);
 
-  selectedEntities.forEach(async (entity) => {
+  for (const entity of selectedEntities) {
     const data = await fetchData(entity.name);
     if (data && data.length > 0) {
       // Only insert data if it's not empty
-      insertData(db, entity.name, data);
+      await insertData(db, entity.name, data);
     } else {
       console.error(`No data found for entity ${entity.name}`);
     }
+  }
+
+  await new Promise((resolve, reject) => {
+    db.close((error) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve();
+      }
+    });
   });
 
-  db.close((error) => {
-    if (error) {
-      return console.error(error.message);
-    }
-    console.log("Closed the database connection.");
-  });
+  console.log("Closed the database connection.");
 }
 
 main();
