@@ -1,4 +1,4 @@
-module.exports = {
+export const constants = {
   GRAPHQL_ENDPOINT: "https://graph.mintbase.xyz/mainnet",
   MB_API_KEY: "anon",
   // Your introspection query here

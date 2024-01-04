@@ -1,20 +1,16 @@
 import axios from "axios";
-const {
-  GRAPHQL_ENDPOINT,
-  MB_API_KEY,
-  INTROSPECTION_QUERY,
-} = require("../utils/constants");
+import { constants } from "../utils/constants.js";
 
 async function fetchSchema() {
   try {
     const response = await axios.post(
-      GRAPHQL_ENDPOINT,
+      constants.GRAPHQL_ENDPOINT,
       {
-        query: INTROSPECTION_QUERY,
+        query: constants.INTROSPECTION_QUERY,
       },
       {
         headers: {
-          "mb-api-key": MB_API_KEY,
+          "mb-api-key": constants.MB_API_KEY,
         },
       }
     );
@@ -25,6 +21,4 @@ async function fetchSchema() {
   }
 }
 
-module.exports = {
-  fetchSchema,
-};
+export default fetchSchema;
