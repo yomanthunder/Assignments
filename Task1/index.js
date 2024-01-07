@@ -5,7 +5,9 @@ import { constants } from "./utils/constants.js";
 
 async function fetchData(entityName) {
   try {
+    // it's more efficient to allow other operations to proceed while waiting for the response.
     const response = await axios.post(
+      //url of the api
       constants.GRAPHQL_ENDPOINT,
       {
         query: constants.INTROSPECTION_QUERY,
@@ -34,28 +36,35 @@ async function insertData(db, tableName, data) {
     return;
   }
 
-  // Check if the first item has a 'name' property
   if (!data[0].hasOwnProperty("name")) {
     console.error("Data items do not have a 'name' property");
     return;
   }
 
-  let placeholders = data.map((_, index) => `$${index + 1}`).join(",");
-  let sql = `INSERT INTO ${tableName} VALUES (${placeholders})`;
+  const extractedData = data.map((field) => ({
+    name: field.name,
+  }));
 
-  db.run(sql, ...data.map((field) => field.name), function (err) {
+  let placeholders = extractedData.map((_, index) => `$${index + 1}`).join(",");
+  let columns = Object.keys(extractedData[0]).join(",");
+  let sql = `INSERT INTO ${tableName} (${columns}) VALUES (${placeholders})`;
+
+  const values = extractedData.map((field) => field.name); // Use extractedData for values
+
+  db.run(sql, values, function (err) {
     if (err) {
       return console.error(err.message);
     }
-    console.log(`Rows inserted ${this.changes}`);
+    console.log(`Rows inserted ${this.changes} into ${tableName}`);
   });
 }
 
 async function main() {
-  const db = new sqlite3.Database(":memory:");
+  // in-memory database
+  const db = new sqlite3.Database("database.db");
 
   const schema = await fetchSchema();
-
+  // aldready provide in the assignment
   const entities = schema.types.filter(
     (entity) =>
       entity.fields !== null &&
@@ -64,8 +73,12 @@ async function main() {
       entity.fields.length > 0 &&
       !entity.name.startsWith("_")
   );
-
+  // before i was using forEach but forEach doesn't wait for asynchronous operations to complete,
+  //potentially causing issues with the order of execution.
+  // used some help from stackover flow
+  // entity represents the current item
   for (const entity of entities) {
+    //necessary for defining the columns of the table.
     const fields = entity.fields
       .map((field) => `${field.name} text`)
       .join(", ");
@@ -75,15 +88,16 @@ async function main() {
       if (error) {
         return console.error(error.message);
       }
-      console.log(`Created table ${entity.name}`);
+      console.log(`Created table ${entity.name} ${fields}`);
     });
   }
 
   // Select the first three entities
-  const selectedEntities = entities.slice(0, 3);
+  const selectedEntities = entities.slice(0, 1);
 
   for (const entity of selectedEntities) {
     const data = await fetchData(entity.name);
+    console.log("Data to be inserted:", data);
     if (data && data.length > 0) {
       // Only insert data if it's not empty
       await insertData(db, entity.name, data);
@@ -91,7 +105,7 @@ async function main() {
       console.error(`No data found for entity ${entity.name}`);
     }
   }
-
+  // a bit of help from stackover flow , for closing the database connection (best practice)
   await new Promise((resolve, reject) => {
     db.close((error) => {
       if (error) {
