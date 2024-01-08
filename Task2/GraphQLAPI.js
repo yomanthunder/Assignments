@@ -17,13 +17,18 @@ class GraphQLAPI {
         }
       );
 
-      const typeInfo = response.data.data.__schema.types.find(
-        (type) => type.name === entityName
-      );
+      const schema = response.data.data && response.data.data.__schema;
+
+      if (!schema || !schema.types) {
+        console.error("Invalid GraphQL schema");
+        return [];
+      }
+
+      const typeInfo = schema.types.find((type) => type.name === entityName);
 
       return typeInfo && typeInfo.fields ? typeInfo.fields : [];
     } catch (error) {
-      console.error(error);
+      console.error("Error in fetchData method:", error);
       return [];
     }
   }

@@ -7,9 +7,16 @@ async function main() {
   const graphqlAPI = new GraphQLAPI();
   const tableManager = new TableManager(db);
 
-  const schema = await graphqlAPI.fetchSchema();
-  const entities =
-    schema.types.filter(/*... your entity filter condition ... */);
+  const schema = await graphqlAPI.fetchData();
+  // aldready provide in the assignment
+  const entities = schema.types.filter(
+    (entity) =>
+      entity.fields !== null &&
+      entity.fields !== "" &&
+      entity.fields !== undefined &&
+      entity.fields.length > 0 &&
+      !entity.name.startsWith("_")
+  );
 
   for (const entity of entities) {
     const fields = entity.fields
