@@ -5,9 +5,7 @@ import { constants } from "./utils/constants.js";
 
 async function fetchData(entityName) {
   try {
-    // it's more efficient to allow other operations to proceed while waiting for the response.
     const response = await axios.post(
-      //url of the api
       constants.GRAPHQL_ENDPOINT,
       {
         query: constants.INTROSPECTION_QUERY,
@@ -26,7 +24,7 @@ async function fetchData(entityName) {
     return typeInfo && typeInfo.fields ? typeInfo.fields : [];
   } catch (error) {
     console.error(error);
-    return []; // Return an empty array if there's an error
+    return [];
   }
 }
 
@@ -45,11 +43,29 @@ async function insertData(db, tableName, data) {
     name: field.name,
   }));
 
-  let placeholders = extractedData.map((_, index) => `$${index + 1}`).join(",");
-  let columns = Object.keys(extractedData[0]).join(",");
+  // Get the column names from the table dynamically
+  const columnNames = await new Promise((resolve, reject) => {
+    db.all(`PRAGMA table_info(${tableName})`, [], (err, columns) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(columns.map((column) => column.name));
+      }
+    });
+  });
+
+  // Filter out the columns that are not present in the extractedData object
+  const filteredExtractedData = extractedData.filter((field) =>
+    columnNames.includes(field.name)
+  );
+
+  let placeholders = filteredExtractedData
+    .map((_, index) => `$${index + 1}`)
+    .join(",");
+  let columns = Object.keys(filteredExtractedData[0]).join(",");
   let sql = `INSERT INTO ${tableName} (${columns}) VALUES (${placeholders})`;
 
-  const values = extractedData.map((field) => field.name); // Use extractedData for values
+  const values = filteredExtractedData.map((field) => field.name);
 
   db.run(sql, values, function (err) {
     if (err) {
@@ -60,11 +76,9 @@ async function insertData(db, tableName, data) {
 }
 
 async function main() {
-  // in-memory database
   const db = new sqlite3.Database("database.db");
 
   const schema = await fetchSchema();
-  // aldready provide in the assignment
   const entities = schema.types.filter(
     (entity) =>
       entity.fields !== null &&
@@ -73,12 +87,8 @@ async function main() {
       entity.fields.length > 0 &&
       !entity.name.startsWith("_")
   );
-  // before i was using forEach but forEach doesn't wait for asynchronous operations to complete,
-  //potentially causing issues with the order of execution.
-  // used some help from stackover flow
-  // entity represents the current item
+
   for (const entity of entities) {
-    //necessary for defining the columns of the table.
     const fields = entity.fields
       .map((field) => `${field.name} text`)
       .join(", ");
@@ -92,20 +102,18 @@ async function main() {
     });
   }
 
-  // Select the first three entities
-  const selectedEntities = entities.slice(0, 1);
+  const selectedEntities = entities.slice(0, 3);
 
   for (const entity of selectedEntities) {
     const data = await fetchData(entity.name);
-    console.log("Data to be inserted:", data);
+    // console.log("Data to be inserted:", data);
     if (data && data.length > 0) {
-      // Only insert data if it's not empty
       await insertData(db, entity.name, data);
     } else {
       console.error(`No data found for entity ${entity.name}`);
     }
   }
-  // a bit of help from stackover flow , for closing the database connection (best practice)
+
   await new Promise((resolve, reject) => {
     db.close((error) => {
       if (error) {
